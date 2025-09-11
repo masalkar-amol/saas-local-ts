@@ -114,3 +114,112 @@ local docker compose build is working where as in CICD pipe line its failing wit
 -----------------------------------------------------------------
 
 https://us-east-1.console.aws.amazon.com/billing/home?region=eu-north-1#/bills
+
+
+-----------------------------------------------------------------
+
+Quick Cleanup Commands (CLI)
+List running EC2 instances:
+aws ec2 describe-instances --query "Reservations[].Instances[?State.Name=='running'].[InstanceId,InstanceType]" --region <your-region>
+
+Delete ECR images:
+aws ecr list-images --repository-name <repo> --region <region>
+aws ecr batch-delete-image --repository-name <repo> --image-ids imageDigest=<digest>
+
+🧹 Tip: Use cdk destroy to Clean Infra
+
+If you're using AWS CDK for infrastructure, you can clean it up easily with:
+
+npx cdk destroy
+
+
+It will prompt to delete everything created in the stack (ECS, ECR, RDS, etc.).
+
+-----------------------------------------------------------------
+
+npx cdk destroy >> will it destroy all instances, images everything so as to reduce charges to 0
+ChatGPT said:
+
+Yes — running **npx cdk destroy** can destroy everything that was created by your CDK stack, including:
+
+✅ ECS clusters and services
+
+✅ EC2 instances (if any were created)
+
+✅ RDS databases (if not protected)
+
+✅ ElastiCache (Redis)
+
+✅ OpenSearch domains
+
+✅ ECR repositories
+
+✅ S3 buckets
+
+✅ IAM roles and policies
+
+✅ CloudWatch log groups
+
+✅ VPCs and subnets
+
+✅ Lambda functions
+
+...and more
+
+⚠️ BUT — Important Warnings
+❗ It only destroys resources created by that CDK stack
+
+It won’t touch resources created manually in the AWS Console or by other stacks/scripts
+
+It won’t delete images inside ECR repositories unless explicitly configured
+
+It may fail to destroy S3 buckets if they’re not empty (unless removalPolicy: DESTROY is set)
+
+✅ What cdk destroy actually does
+
+It uses CloudFormation under the hood to:
+
+Identify all resources in the CDK stack
+
+Issue delete commands to AWS
+
+Wait until all deletions are complete
+
+You will be prompted with something like:
+
+Are you sure you want to delete: stack-name (y/n)?
+
+🧹 How to ensure complete cleanup (and reduce charges to 0)
+Step-by-step cleanup checklist:
+Task	Command or Console
+✅ Destroy all CDK stacks	npx cdk destroy (for each stack)
+🧼 Empty S3 buckets if destroy fails	AWS Console or CLI
+❌ Delete unused ECR repos or images	aws ecr delete-repository or Console
+⛔ Delete EC2 instances manually	EC2 Console
+💾 Delete RDS snapshots (not auto-deleted)	RDS Console
+📦 Delete manually created resources	Console or CLI
+🧾 Review usage/cost in Billing dashboard	Billing Console
+🛡️ Bonus Tip: Check what will be destroyed (Dry Run)
+
+Before destroying, you can see what will be deleted by running:
+
+npx cdk diff
+
+
+It won’t delete anything — just shows the changes (add/remove) that will happen.
+
+✅ Example Safe Cleanup Flow
+# Navigate to your CDK project
+cd .infra/cdk
+
+# Destroy your stack (you'll be prompted to confirm)
+npx cdk destroy
+
+
+You can pass the stack name if you have multiple:
+
+npx cdk destroy MyStackName
+
+Want help checking your stack's current resources or a safe cleanup order?
+
+You can run npx cdk list and send me the output. I’ll guide you through a complete cleanup.
