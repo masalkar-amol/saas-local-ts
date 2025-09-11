@@ -29,21 +29,9 @@ Runs 100% locally via **Docker Compose** — **no cloud credentials required**.
 - **Web**: React + TypeScript + Webpack + LESS (SPA UI).
 - **Extras**: MinIO (S3-compatible), DynamoDB-Local (NoSQL demo), OpenSearch (optional text/vector search).
 
-Mermaid (architecture):
+Architecture :
 
-Mermaid (architecture):
-
-```mermaid
-graph LR
-  UI["React TS localhost:3000"] -->|Regular| API["Django/DRF localhost:9070"]
-  UI -->|AI| AISVC["FastAPI AI localhost:8001"]
-  API <-->|CRUD| PG["PostgreSQL"]
-  API -.tasks.-> WKR["Celery Worker"]
-  WKR -.broker.-> RDS["Redis"]
-  API <-->|S3 API| MINIO["MinIO"]
-  API <-->|SDK| DDB["DynamoDB-Local"]
-  API <-->|REST| OS["OpenSearch"]
-  AISVC --> API
+<img width="838" height="936" alt="c3" src="https://github.com/user-attachments/assets/20c9e4f1-5d86-48bc-b552-ce0065fd18cb" />
 
 
 
