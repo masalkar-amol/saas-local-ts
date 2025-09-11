@@ -23,6 +23,45 @@ docker compose port api 8000
 docker compose up -d
 
 
+#See what’s eating space
+docker system df -v 
+
+#Quick cleanup
+docker system prune -a --volumes 
+
+# All builder caches (BuildKit)
+docker builder prune -a
+
+# Or only caches not used in 24h
+docker builder prune -a --filter "until=24h"
+
+# Stopped containers
+docker container prune
+
+# Dangling/unused images
+docker image prune -a
+
+# Unused volumes
+docker volume prune
+
+# Unused networks
+docker network prune
+
+#If space is still not freed: compact/move Docker’s VHDX
+#With WSL2 backend, Docker stores everything inside a virtual disk:
+
+C:\Users\HP\AppData\Local\Docker\wsl\disk\ext4.vhdx
+
+
+This file doesn’t shrink automatically. Do one (or both):
+
+(A) Compact the VHDX
+
+Close Docker Desktop and WSL:
+
+wsl --shutdown
+
+
 docker compose exec -it postgres psql -U app -d comp -c "SELECT * from biomarkers_biomarker;"
  id | code |               name               | assay_type | attributes |          created_at
 ----+------+----------------------------------+------------+------------+-------------------------------

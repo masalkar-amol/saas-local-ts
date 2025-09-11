@@ -1,7 +1,7 @@
 name: Deploy
 on:
   push:
-    branches: [ main ]   # deploy on main
+    branches: [ master ]   # deploy on master
   workflow_dispatch: {}
 
 permissions:
