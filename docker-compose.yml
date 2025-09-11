@@ -89,7 +89,7 @@ services:
 
   ai:
     build: ./ai
-    container_name: comp-lifesci-saas-local-ts-ai
+    container_name: saas-local-ts-ai
     environment:
       - API_BASE=http://api:8000
       - EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2

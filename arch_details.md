@@ -1,4 +1,4 @@
-In morning you given me repo comp-lifesci-saas-local-ts where No cloud credentials, no AWS account required. Everything runs via Docker Compose >> I am able to run this now >> give me the the further explanation and understanding
+In morning you given me repo saas-local-ts where No cloud credentials, no AWS account required. Everything runs via Docker Compose >> I am able to run this now >> give me the the further explanation and understanding
 ChatGPT said:
 
 awesome—since you’ve got the stack running, here’s a clear mental model of what’s running, how requests/data flow, where to look in code, and what to tweak next. I’ll keep it practical so you can navigate and extend confidently.
