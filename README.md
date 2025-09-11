@@ -1,4 +1,4 @@
-# comp-lifesci-saas-local-ts
+# saas-local-ts
 
 **Cloud-free, end-to-end SaaS starter** for life sciences data apps — with **Django/DRF**, **PostgreSQL**, **Celery/Redis**, **React TypeScript**, and **AI semantic search** (FastAPI + Sentence-Transformers + FAISS).  
 Runs 100% locally via **Docker Compose** — **no cloud credentials required**.
@@ -33,14 +33,14 @@ Mermaid (architecture):
 
 ```mermaid
 graph LR
-  UI[React TS (localhost:3000)] -->|Regular| API[Django/DRF (localhost:9070)]
-  UI -->|AI| AI[FastAPI AI (localhost:8001)]
-  API <--> PG[(PostgreSQL)]
-  API <-.tasks .-> WKR[Celery Worker]
-  WKR <-.broker .-> RDS[(Redis)]
-  API <--> MINIO[(MinIO)]
-  API <--> DDB[(DynamoDB-Local)]
-  API <--> OS[(OpenSearch)]
+  UI["React TS localhost:3000"] -->|Regular| API["Django/DRF localhost:9070"]
+  UI -->|AI| AI["FastAPI AI localhost:8001"]
+  API <--> PG[("PostgreSQL")]
+  API -.tasks.-> WKR["Celery Worker"]
+  WKR -.broker.-> RDS[("Redis")]
+  API <--> MINIO[("MinIO")]
+  API <--> DDB[("DynamoDB-Local")]
+  API <--> OS[("OpenSearch")]
   AI --> API
 
 
