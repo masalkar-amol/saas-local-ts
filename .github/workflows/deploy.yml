@@ -13,7 +13,7 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
   AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
   CDK_STACK_NAME: ${{ secrets.CDK_STACK_NAME }}
-  CDK_PATH: .infra/cdk   # << change this if your CDK app lives elsewhere (e.g. "cdk")
+  CDK_PATH: .infra/cdk   # change if your CDK app lives elsewhere (e.g., "cdk")
 
 jobs:
   deploy:
@@ -21,13 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Auth to AWS via OIDC
+      # --- AWS auth via OIDC ---
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Resolve account & image tag
+      # --- Account & tag ---
       - name: Resolve AWS account & image tag
         id: meta
         shell: bash
@@ -36,12 +36,13 @@ jobs:
           echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
           echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      # Build ECR registry URL
       - name: Set ECR registry env
         shell: bash
-        run: echo "ECR_REGISTRY=${{ steps.meta.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> "$GITHUB_ENV"
+        run: |
+          set -euo pipefail
+          echo "ECR_REGISTRY=${{ steps.meta.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> "$GITHUB_ENV"
 
-      # (Optional) Ensure ECR repos exist (requires ecr:CreateRepository)
+      # --- (Optional) Create repos if role allows it ---
       - name: Ensure ECR repositories
         shell: bash
         run: |
@@ -54,10 +55,10 @@ jobs:
             fi
           done
 
-      # Login to ECR
+      # --- Login to ECR ---
       - uses: aws-actions/amazon-ecr-login@v2
 
-      # Build & push images
+      # --- Build & push images ---
       - name: Build & Push API
         shell: bash
         run: |
@@ -79,7 +80,7 @@ jobs:
           docker build -t "$ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}" -f web/Dockerfile web
           docker push "$ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}"
 
-      # Publish image tags to SSM (CDK reads these)
+      # --- Publish image tags for CDK to read ---
       - name: Write image tags to SSM
         shell: bash
         run: |
@@ -88,7 +89,7 @@ jobs:
           aws ssm put-parameter --name "/saas-local-ts/aiImageTag"  --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
           aws ssm put-parameter --name "/saas-local-ts/webImageTag" --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
 
-      # CDK deploy (guard the path)
+      # --- CDK deploy (handle missing lockfile) ---
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -102,12 +103,18 @@ jobs:
             exit 1
           fi
 
-      - name: Install CDK app deps
+      - name: Install CDK app deps (ci if lockfile, else install)
         shell: bash
         working-directory: ${{ env.CDK_PATH }}
         run: |
           set -euo pipefail
-          npm ci
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            echo "Lockfile found → npm ci"
+            npm ci
+          else
+            echo "No lockfile → npm install"
+            npm install
+          fi
 
       - name: CDK Bootstrap (safe to re-run)
         shell: bash

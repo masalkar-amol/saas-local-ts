@@ -106,6 +106,9 @@ Choose the JSON tab and paste in this minimum policy:
 
 -----------------------------------------------------------------
 
-local docker compose build is working where as in CICD pipe line its failing with error >>
+local docker compose build is working where as in CICD pipe line its failing with error 
+>> Run set -euo pipefail /home/runner/work/_temp/025ab8f6-533c-4a6b-9f97-5428e7bd3e3a.sh: line 2: cd: infra/cdk: No such file or directory Error: Process completed with exit code 1. 
+>> here is my deploy.yml >> please fix above error
+
 
 -----------------------------------------------------------------
