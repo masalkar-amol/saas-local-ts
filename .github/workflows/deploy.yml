@@ -10,9 +10,10 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}                  # e.g. ap-south-1
-  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}  # arn:aws:iam::<acct>:role/GitHub-OIDC-DeployRole
-  CDK_STACK_NAME: ${{ secrets.CDK_STACK_NAME }}          # e.g. SaaSLocalTsStack
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+  CDK_STACK_NAME: ${{ secrets.CDK_STACK_NAME }}
+  CDK_PATH: .infra/cdk   # << change this if your CDK app lives elsewhere (e.g. "cdk")
 
 jobs:
   deploy:
@@ -20,13 +21,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1) Auth to AWS via OIDC
+      # Auth to AWS via OIDC
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # 2) Resolve account id & image tag
+      # Resolve account & image tag
       - name: Resolve AWS account & image tag
         id: meta
         shell: bash
@@ -35,34 +36,28 @@ jobs:
           echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
           echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      # 3) Compute ECR registry URL
+      # Build ECR registry URL
       - name: Set ECR registry env
         shell: bash
-        run: |
-          set -euo pipefail
-          echo "ECR_REGISTRY=${{ steps.meta.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> "$GITHUB_ENV"
+        run: echo "ECR_REGISTRY=${{ steps.meta.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> "$GITHUB_ENV"
 
-      # 4) Ensure ECR repositories exist (fix: singular --repository-name for create)
+      # (Optional) Ensure ECR repos exist (requires ecr:CreateRepository)
       - name: Ensure ECR repositories
         shell: bash
         run: |
           set -euo pipefail
           for repo in api ai web; do
             if ! aws ecr describe-repositories --repository-names "$repo" >/dev/null 2>&1; then
-              aws ecr create-repository \
-                --repository-name "$repo" \
+              aws ecr create-repository --repository-name "$repo" \
                 --image-scanning-configuration scanOnPush=true \
-                --tags Key=Project,Value=saas-local-ts >/dev/null
-              echo "Created ECR repo: $repo"
-            else
-              echo "ECR repo exists: $repo"
+                --tags Key=Project,Value=saas-local-ts >/dev/null || true
             fi
           done
 
-      # 5) Login to ECR
+      # Login to ECR
       - uses: aws-actions/amazon-ecr-login@v2
 
-      # 6) Build & push images (tag = short SHA)
+      # Build & push images
       - name: Build & Push API
         shell: bash
         run: |
@@ -84,7 +79,7 @@ jobs:
           docker build -t "$ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}" -f web/Dockerfile web
           docker push "$ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}"
 
-      # 7) Publish image tags to SSM for CDK to consume
+      # Publish image tags to SSM (CDK reads these)
       - name: Write image tags to SSM
         shell: bash
         run: |
@@ -93,29 +88,38 @@ jobs:
           aws ssm put-parameter --name "/saas-local-ts/aiImageTag"  --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
           aws ssm put-parameter --name "/saas-local-ts/webImageTag" --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
 
-      # 8) CDK deploy (reads SSM parameters)
+      # CDK deploy (guard the path)
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install CDK app deps
+      - name: Check CDK path exists
         shell: bash
         run: |
           set -euo pipefail
-          cd infra/cdk
+          if [ ! -d "${{ env.CDK_PATH }}" ]; then
+            echo "ERROR: CDK_PATH '${{ env.CDK_PATH }}' does not exist. Create your CDK app there or set env.CDK_PATH to the correct folder."
+            exit 1
+          fi
+
+      - name: Install CDK app deps
+        shell: bash
+        working-directory: ${{ env.CDK_PATH }}
+        run: |
+          set -euo pipefail
           npm ci
 
       - name: CDK Bootstrap (safe to re-run)
         shell: bash
+        working-directory: ${{ env.CDK_PATH }}
         run: |
           set -euo pipefail
-          cd infra/cdk
           ACCOUNT_ID=${{ steps.meta.outputs.account_id }}
           npx cdk bootstrap aws://$ACCOUNT_ID/${{ env.AWS_REGION }}
 
       - name: CDK Deploy
         shell: bash
+        working-directory: ${{ env.CDK_PATH }}
         run: |
           set -euo pipefail
-          cd infra/cdk
           npx cdk deploy "${{ env.CDK_STACK_NAME }}" --require-approval never

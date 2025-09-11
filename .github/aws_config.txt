@@ -1,0 +1,111 @@
+
+
+------------------------------
+Go to your GitHub repository → Settings → Secrets and Variables → Actions
+Click “New repository secret”
+
+AWS_REGION
+Name: AWS_REGION
+Value: eu-north-1
+
+AWS_ROLE_TO_ASSUME
+Name: AWS_ROLE_TO_ASSUME
+Value: arn:aws:iam::752095361522:role/IAM_Role_ma
+
+ECR_REGISTRY
+Name: ECR_REGISTRY
+Value: 752095361522.dkr.ecr.eu-north-1.amazonaws.com
+------------------------------
+Trust policy >>
+
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Principal": {
+				"Federated": "arn:aws:iam::752095361522:oidc-provider/token.actions.githubusercontent.com"
+			},
+			"Action": "sts:AssumeRoleWithWebIdentity",
+			"Condition": {
+				"StringEquals": {
+					"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+				},
+				"StringLike": {
+					"token.actions.githubusercontent.com:sub": "repo:masalkar-amol/saas-local-ts:ref:refs/heads/master"
+				}
+			}
+		}
+	]
+}
+
+
+
+------------------------------
+Sign in to AWS Console with an account that has IAM admin rights.
+
+Go to IAM → Roles.
+
+Search for and click on your role name: IAM_Role_ma.
+
+In the role page, go to the Permissions tab.
+
+Click Add permissions → Create inline policy.
+
+Choose the JSON tab and paste in this minimum policy:
+>>
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:CreateRepository",
+        "ecr:DescribeRepositories",
+        "ecr:DescribeImages",
+        "ecr:SetRepositoryPolicy",
+        "ecr:ListTagsForResource",
+        "ecr:TagResource",
+        "ecr:UntagResource",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage",
+        "ecr:BatchGetImage",
+        "ecr:BatchDeleteImage"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:AddTagsToResource"
+      ],
+      "Resource": "arn:aws:ssm:*:752095361522:parameter/saas-local-ts/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:*",
+        "ecs:*",
+        "elasticloadbalancing:*",
+        "logs:*",
+        "ec2:*",
+        "iam:PassRole"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+
+-----------------------------------------------------------------
+
+local docker compose build is working where as in CICD pipe line its failing with error >>
+
+-----------------------------------------------------------------
