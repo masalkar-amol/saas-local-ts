@@ -8,16 +8,8 @@ Runs 100% locally via **Docker Compose** — **no cloud credentials required**.
 ## Table of Contents
 
 - [Stack Overview](#stack-overview)
-- [Services & Ports](#services--ports)
-- [Quick Start](#quick-start)
+- [Architecture](#architecture)
 - [Seeding Data](#seeding-data)
-- [Regular vs AI Search](#regular-vs-ai-search)
-- [Configuration](#configuration)
-- [Health Checks & Useful Commands](#health-checks--useful-commands)
-- [Troubleshooting](#troubleshooting)
-- [Project Structure](#project-structure)
-- [License](#license)
-
 ---
 
 ## Stack Overview
