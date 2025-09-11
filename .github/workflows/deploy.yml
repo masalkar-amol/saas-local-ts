@@ -1,0 +1,58 @@
+name: Deploy
+on:
+  push:
+    branches: [ main ]   # deploy on main
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  CDK_STACK_NAME: ${{ secrets.CDK_STACK_NAME }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Auth to AWS via OIDC
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Login to ECR
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      # Build & push images (api, ai, web) — adjust paths/Dockerfiles
+      - name: Build & Push API
+        run: |
+          docker build -t $ECR_REGISTRY/api:$(git rev-parse --short HEAD) -f api/Dockerfile api
+          docker push $ECR_REGISTRY/api:$(git rev-parse --short HEAD)
+      - name: Build & Push AI
+        run: |
+          docker build -t $ECR_REGISTRY/ai:$(git rev-parse --short HEAD) -f ai/Dockerfile ai
+          docker push $ECR_REGISTRY/ai:$(git rev-parse --short HEAD)
+      - name: Build & Push WEB
+        run: |
+          docker build -t $ECR_REGISTRY/web:$(git rev-parse --short HEAD) -f web/Dockerfile web
+          docker push $ECR_REGISTRY/web:$(git rev-parse --short HEAD)
+
+      # CDK synth+deploy (infra + service defs)
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install CDK app deps
+        run: |
+          npm -v
+          cd infra/cdk && npm ci
+      - name: CDK Bootstrap (first time per account/region)
+        run: cd infra/cdk && npx cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
+        env:
+          AWS_ACCOUNT_ID: ${{ steps.set_account.outputs.account_id }}
+        continue-on-error: true
+      - name: CDK Deploy
+        run: cd infra/cdk && npx cdk deploy $CDK_STACK_NAME --require-approval never

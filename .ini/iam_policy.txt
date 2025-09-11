@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetAuthorizationToken",
+        "ecr:PutImage",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart"
+      ],
+      "Resource": "arn:aws:ecr:<REGION>:<AWS_ACCOUNT_ID>:repository/<REPOSITORY_NAME>"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "iam:PassRole",
+        "ecs:CreateCluster",
+        "ecs:CreateService",
+        "ecs:UpdateService",
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
