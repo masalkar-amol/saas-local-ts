@@ -11,21 +11,21 @@ export class CompPipelineStack extends cdk.Stack {
       pipelineName: 'SaaSLocalTsPipeline',
       synth: new ShellStep('Synth', {
         input: CodePipelineSource.gitHub('masalkar-amol/saas-local-ts', 'main', {
-          authentication: cdk.SecretValue.secretsManager('github-token'),  // or use CodeStar connection
+          // Prefer CodeStar connection in production
         }),
         commands: [
-          'cd infra/cdk',
-          'npm ci',
+          'cd .infra/cdk',
+          'npm ci || npm i',
           'npx cdk synth'
-        ],
-      }),
+        ]
+      })
     });
 
-    const dev = new cdk.Stage(this, 'Dev', {});
-    new CompSaaSStack(dev, 'CompSaaSStack-Dev');
+    const dev = new cdk.Stage(this, 'Dev');
+    new CompSaaSStack(dev, 'SaaSLocalTsStack-Dev');
 
-    const prod = new cdk.Stage(this, 'Prod', {});
-    new CompSaaSStack(prod, 'CompSaaSStack-Prod');
+    const prod = new cdk.Stage(this, 'Prod');
+    new CompSaaSStack(prod, 'SaaSLocalTsStack-Prod');
 
     pipeline.addStage(dev);
     pipeline.addStage(prod, { pre: [ new ManualApprovalStep('PromoteToProd') ] });

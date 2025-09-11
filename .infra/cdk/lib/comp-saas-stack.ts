@@ -2,84 +2,91 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
-import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
+import * as ecsPatterns from 'aws-cdk-lib/aws-ecs-patterns';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
-import * as rds from 'aws-cdk-lib/aws-rds';
-import * as elasticache from 'aws-cdk-lib/aws-elasticache';
-import * as iam from 'aws-cdk-lib/aws-iam';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 
 export class CompSaaSStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    // Networking
     const vpc = new ec2.Vpc(this, 'Vpc', { maxAzs: 2 });
 
-    // ECR repos for images
-    const apiRepo = new ecr.Repository(this, 'ApiRepo', { repositoryName: 'api' });
-    const aiRepo  = new ecr.Repository(this, 'AiRepo',  { repositoryName: 'ai'  });
-    const webRepo = new ecr.Repository(this, 'WebRepo', { repositoryName: 'web' });
-
+    // ECS
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc });
 
-    // RDS Postgres
-    const db = new rds.DatabaseInstance(this, 'RdsPg', {
-      vpc, engine: rds.DatabaseInstanceEngine.postgres({ version: rds.PostgresEngineVersion.VER_15 }),
-      instanceType: new ec2.InstanceType('t3.micro'),
-      allocatedStorage: 20,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      publiclyAccessible: false,
-    });
+    // ECR repos (must exist; create once manually or via pipeline step)
+    const apiRepo = ecr.Repository.fromRepositoryName(this, 'ApiRepo', 'api');
+    const aiRepo  = ecr.Repository.fromRepositoryName(this, 'AiRepo',  'ai');
+    const webRepo = ecr.Repository.fromRepositoryName(this, 'WebRepo', 'web');
 
-    // ElastiCache Redis (for Celery broker/results)
-    const subnetGroup = new elasticache.CfnSubnetGroup(this, 'RedisSubnets', {
-      description: 'Redis subnets', subnetIds: vpc.privateSubnets.map(s => s.subnetId)
-    });
-    const redis = new elasticache.CfnCacheCluster(this, 'Redis', {
-      engine: 'redis', cacheNodeType: 'cache.t3.micro', numCacheNodes: 1,
-      cacheSubnetGroupName: subnetGroup.ref
-    });
+    // Read image tags from SSM (populated by GitHub Actions)
+    const apiTag = ssm.StringParameter.valueForStringParameter(this, '/saas-local-ts/apiImageTag', 1);
+    const aiTag  = ssm.StringParameter.valueForStringParameter(this, '/saas-local-ts/aiImageTag',  1);
+    const webTag = ssm.StringParameter.valueForStringParameter(this, '/saas-local-ts/webImageTag', 1);
+
+    // Logs
+    const logGroupApi = new logs.LogGroup(this, 'ApiLogs', { retention: logs.RetentionDays.ONE_WEEK });
+    const logGroupAi  = new logs.LogGroup(this, 'AiLogs',  { retention: logs.RetentionDays.ONE_WEEK });
+    const logGroupWeb = new logs.LogGroup(this, 'WebLogs', { retention: logs.RetentionDays.ONE_WEEK });
 
     // API service (ALB Fargate)
-    const api = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'ApiSvc', {
-      cluster, cpu: 512, memoryLimitMiB: 1024, desiredCount: 1,
+    const apiSvc = new ecsPatterns.ApplicationLoadBalancedFargateService(this, 'ApiService', {
+      cluster,
+      desiredCount: 1,
+      publicLoadBalancer: true,
+      cpu: 512,
+      memoryLimitMiB: 1024,
       taskImageOptions: {
-        image: ecs.ContainerImage.fromEcrRepository(apiRepo, process.env.IMAGE_TAG || 'latest'),
+        image: ecs.ContainerImage.fromEcrRepository(apiRepo, apiTag),
+        containerName: 'api',
         containerPort: 9070,
+        logDriver: ecs.LogDrivers.awsLogs({ streamPrefix: 'api', logGroup: logGroupApi }),
         environment: {
-          DATABASE_HOST: db.instanceEndpoint.hostname,
-          REDIS_HOST: redis.attrRedisEndpointAddress,
-          // S3/OpenSearch endpoints etc…
-        },
-      },
+          // TODO: add DB/Redis/OpenSearch endpoints or SSM/Secrets
+        }
+      }
+    });
+
+    // AI service (internal Fargate)
+    const aiTask = new ecs.FargateTaskDefinition(this, 'AiTask', {
+      cpu: 512,
+      memoryLimitMiB: 1024
+    });
+    const aiContainer = aiTask.addContainer('ai', {
+      image: ecs.ContainerImage.fromEcrRepository(aiRepo, aiTag),
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'ai', logGroup: logGroupAi })
+    });
+    aiContainer.addPortMappings({ containerPort: 8001 });
+
+    const aiSvc = new ecs.FargateService(this, 'AiService', {
+      cluster,
+      desiredCount: 1,
+      taskDefinition: aiTask,
+      assignPublicIp: true // or place behind NLB/ALB if you want private networking
+    });
+
+    // Allow API -> AI (if API calls AI over 8001)
+    aiSvc.connections.allowFrom(apiSvc.service, ec2.Port.tcp(8001));
+
+    // WEB service (ALB Fargate)
+    const webSvc = new ecsPatterns.ApplicationLoadBalancedFargateService(this, 'WebService', {
+      cluster,
+      desiredCount: 1,
       publicLoadBalancer: true,
-    });
-
-    // AI service (path route /ai/*)
-    const ai = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'AiSvc', {
-      cluster, cpu: 512, memoryLimitMiB: 1024, desiredCount: 1,
+      cpu: 256,
+      memoryLimitMiB: 512,
       taskImageOptions: {
-        image: ecs.ContainerImage.fromEcrRepository(aiRepo, process.env.IMAGE_TAG || 'latest'),
-        containerPort: 8001,
-      },
-      publicLoadBalancer: false,
-    });
-    api.listener.addTargets('AiPath', {
-      priority: 10,
-      conditions: [ecs_patterns.ListenerCondition.pathPatterns(['/ai/*'])],
-      port: 80,
-      targets: [ai.service],
-    });
-
-    // WEB as static (option A: S3+CloudFront) or container (option B)
-    const web = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'WebSvc', {
-      cluster, cpu: 256, memoryLimitMiB: 512, desiredCount: 1,
-      taskImageOptions: {
-        image: ecs.ContainerImage.fromEcrRepository(webRepo, process.env.IMAGE_TAG || 'latest'),
+        image: ecs.ContainerImage.fromEcrRepository(webRepo, webTag),
+        containerName: 'web',
         containerPort: 3000,
-      },
-      publicLoadBalancer: true,
+        logDriver: ecs.LogDrivers.awsLogs({ streamPrefix: 'web', logGroup: logGroupWeb })
+      }
     });
 
-    db.connections.allowDefaultPortFrom(api.service);  // API -> DB
+    new cdk.CfnOutput(this, 'ApiURL', { value: `http://${apiSvc.loadBalancer.loadBalancerDnsName}` });
+    new cdk.CfnOutput(this, 'WebURL', { value: `http://${webSvc.loadBalancer.loadBalancerDnsName}` });
   }
 }
