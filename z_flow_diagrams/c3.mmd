@@ -1,0 +1,10 @@
+graph LR
+  UI["React TS localhost:3000"] -->|Regular| API["Django/DRF localhost:9070"]
+  UI -->|AI| AI["FastAPI AI localhost:8001"]
+  API <--> PG[("PostgreSQL")]
+  API -.tasks.-> WKR["Celery Worker"]
+  WKR -.broker.-> RDS[("Redis")]
+  API <--> MINIO[("MinIO")]
+  API <--> DDB[("DynamoDB-Local")]
+  API <--> OS[("OpenSearch")]
+  AI --> API
