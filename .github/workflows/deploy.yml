@@ -1,7 +1,8 @@
 name: Deploy
+
 on:
   push:
-    branches: [ master ]   # deploy on master
+    branches: [ master ]
   workflow_dispatch: {}
 
 permissions:
@@ -9,9 +10,9 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-  CDK_STACK_NAME: ${{ secrets.CDK_STACK_NAME }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}                  # e.g. ap-south-1
+  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}  # arn:aws:iam::<acct>:role/GitHub-OIDC-DeployRole
+  CDK_STACK_NAME: ${{ secrets.CDK_STACK_NAME }}          # e.g. SaaSLocalTsStack
 
 jobs:
   deploy:
@@ -19,40 +20,74 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Auth to AWS via OIDC
+      # 1) Auth to AWS via OIDC
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Login to ECR
+      # 2) Capture account id & build tag
+      - name: Resolve AWS account & image tag
+        id: meta
+        run: |
+          echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
+          echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      # 3) Compute ECR registry url (must match region above)
+      - name: Set ECR registry env
+        run: echo "ECR_REGISTRY=${{ steps.meta.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> $GITHUB_ENV
+
+      # 4) Ensure ECR repos exist (prevents 'name unknown' errors)
+      - name: Ensure ECR repositories
+        run: |
+          for repo in api ai web; do
+            aws ecr describe-repositories --repository-names "$repo" >/dev/null 2>&1 || \
+            aws ecr create-repository --repository-names "$repo" >/dev/null
+          done
+
+      # 5) Login to ECR
       - uses: aws-actions/amazon-ecr-login@v2
 
-      # Build & push images (api, ai, web) — adjust paths/Dockerfiles
+      # 6) Build & push images (NOTE: tag with full ECR repo url)
       - name: Build & Push API
         run: |
-          docker build -t $ECR_REGISTRY/api:$(git rev-parse --short HEAD) -f api/Dockerfile api
-          docker push $ECR_REGISTRY/api:$(git rev-parse --short HEAD)
+          docker build -t $ECR_REGISTRY/api:${{ steps.meta.outputs.tag }} -f api/Dockerfile api
+          docker push $ECR_REGISTRY/api:${{ steps.meta.outputs.tag }}
+
       - name: Build & Push AI
         run: |
-          docker build -t $ECR_REGISTRY/ai:$(git rev-parse --short HEAD) -f ai/Dockerfile ai
-          docker push $ECR_REGISTRY/ai:$(git rev-parse --short HEAD)
+          docker build -t $ECR_REGISTRY/ai:${{ steps.meta.outputs.tag }} -f ai/Dockerfile ai
+          docker push $ECR_REGISTRY/ai:${{ steps.meta.outputs.tag }}
+
       - name: Build & Push WEB
         run: |
-          docker build -t $ECR_REGISTRY/web:$(git rev-parse --short HEAD) -f web/Dockerfile web
-          docker push $ECR_REGISTRY/web:$(git rev-parse --short HEAD)
+          docker build -t $ECR_REGISTRY/web:${{ steps.meta.outputs.tag }} -f web/Dockerfile web
+          docker push $ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}
 
-      # CDK synth+deploy (infra + service defs)
+      # 7) Publish image tags to SSM for CDK to consume
+      - name: Write image tags to SSM
+        run: |
+          aws ssm put-parameter --name "/saas-local-ts/apiImageTag" --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
+          aws ssm put-parameter --name "/saas-local-ts/aiImageTag"  --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
+          aws ssm put-parameter --name "/saas-local-ts/webImageTag" --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
+
+      # 8) CDK deploy (reads SSM parameters)
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with:
+          node-version: 20
+
       - name: Install CDK app deps
         run: |
-          npm -v
-          cd infra/cdk && npm ci
-      - name: CDK Bootstrap (first time per account/region)
-        run: cd infra/cdk && npx cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
-        env:
-          AWS_ACCOUNT_ID: ${{ steps.set_account.outputs.account_id }}
-        continue-on-error: true
+          cd infra/cdk
+          npm ci
+
+      - name: CDK Bootstrap (safe to re-run)
+        run: |
+          cd infra/cdk
+          ACCOUNT_ID=${{ steps.meta.outputs.account_id }}
+          npx cdk bootstrap aws://$ACCOUNT_ID/${{ env.AWS_REGION }}
+
       - name: CDK Deploy
-        run: cd infra/cdk && npx cdk deploy $CDK_STACK_NAME --require-approval never
+        run: |
+          cd infra/cdk
+          npx cdk deploy ${{ env.CDK_STACK_NAME }} --require-approval never
