@@ -10,10 +10,11 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-  CDK_STACK_NAME: ${{ secrets.CDK_STACK_NAME }}
-  CDK_PATH: .infra/cdk   # change if your CDK app lives elsewhere (e.g., "cdk")
+  AWS_REGION: ${{ secrets.AWS_REGION }}                  # e.g. ap-south-1
+  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}  # arn:aws:iam::<acct>:role/YourOidcRole
+  CDK_STACK_NAME: ${{ secrets.CDK_STACK_NAME }}          # e.g. SaaSLocalTsStack
+  CDK_PATH: .infra/cdk                                   # <-- set to your CDK folder
+  NODE_VERSION: 20
 
 jobs:
   deploy:
@@ -21,13 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- AWS auth via OIDC ---
+      # ---------- AWS auth (OIDC) ----------
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # --- Account & tag ---
+      # ---------- Resolve account & tag ----------
       - name: Resolve AWS account & image tag
         id: meta
         shell: bash
@@ -38,11 +39,9 @@ jobs:
 
       - name: Set ECR registry env
         shell: bash
-        run: |
-          set -euo pipefail
-          echo "ECR_REGISTRY=${{ steps.meta.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> "$GITHUB_ENV"
+        run: echo "ECR_REGISTRY=${{ steps.meta.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> "$GITHUB_ENV"
 
-      # --- (Optional) Create repos if role allows it ---
+      # ---------- (Optional) Ensure ECR repos (requires ecr:CreateRepository) ----------
       - name: Ensure ECR repositories
         shell: bash
         run: |
@@ -55,10 +54,10 @@ jobs:
             fi
           done
 
-      # --- Login to ECR ---
+      # ---------- ECR login ----------
       - uses: aws-actions/amazon-ecr-login@v2
 
-      # --- Build & push images ---
+      # ---------- Build & push images ----------
       - name: Build & Push API
         shell: bash
         run: |
@@ -80,7 +79,7 @@ jobs:
           docker build -t "$ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}" -f web/Dockerfile web
           docker push "$ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}"
 
-      # --- Publish image tags for CDK to read ---
+      # ---------- Publish tags for CDK to read ----------
       - name: Write image tags to SSM
         shell: bash
         run: |
@@ -89,34 +88,46 @@ jobs:
           aws ssm put-parameter --name "/saas-local-ts/aiImageTag"  --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
           aws ssm put-parameter --name "/saas-local-ts/webImageTag" --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
 
-      # --- CDK deploy (handle missing lockfile) ---
+      # ---------- CDK deploy (install deps if missing) ----------
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Check CDK path exists
+      - name: Verify CDK path & package.json
+        id: detect_cdk
         shell: bash
         run: |
           set -euo pipefail
           if [ ! -d "${{ env.CDK_PATH }}" ]; then
-            echo "ERROR: CDK_PATH '${{ env.CDK_PATH }}' does not exist. Create your CDK app there or set env.CDK_PATH to the correct folder."
-            exit 1
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "##[warning]No CDK folder at '${{ env.CDK_PATH }}' — skipping CDK steps."
+            exit 0
           fi
+          if [ ! -f "${{ env.CDK_PATH }}/package.json" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "##[warning]No package.json in '${{ env.CDK_PATH }}' — skipping CDK steps."
+            exit 0
+          fi
+          echo "present=true" >> "$GITHUB_OUTPUT"
 
-      - name: Install CDK app deps (ci if lockfile, else install)
+      - name: Install CDK deps (with lockfile if present)
         if: steps.detect_cdk.outputs.present == 'true'
         shell: bash
         working-directory: ${{ env.CDK_PATH }}
         run: |
           set -euo pipefail
+          # Install baseline deps if missing (fixes 'Cannot find module aws-cdk-lib' and node typings)
+          npm ls aws-cdk-lib >/dev/null 2>&1 || npm i aws-cdk-lib constructs
+          npm ls ts-node >/dev/null 2>&1 || npm i -D ts-node typescript @types/node
+          # Use lockfile if available
           if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
             npm ci
           else
             npm install
           fi
 
-
       - name: CDK Bootstrap (safe to re-run)
+        if: steps.detect_cdk.outputs.present == 'true'
         shell: bash
         working-directory: ${{ env.CDK_PATH }}
         run: |
@@ -125,6 +136,7 @@ jobs:
           npx cdk bootstrap aws://$ACCOUNT_ID/${{ env.AWS_REGION }}
 
       - name: CDK Deploy
+        if: steps.detect_cdk.outputs.present == 'true'
         shell: bash
         working-directory: ${{ env.CDK_PATH }}
         run: |

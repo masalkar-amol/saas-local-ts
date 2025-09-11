@@ -1,5 +1,6 @@
 
-
+aws account id >>
+752095361522
 ------------------------------
 Go to your GitHub repository → Settings → Secrets and Variables → Actions
 Click “New repository secret”
