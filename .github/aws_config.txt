@@ -31,6 +31,70 @@ Or for destroy:
 
 run: npx cdk destroy ${{ secrets.CDK_STACK_NAME }} --force
 
+npx cdk destroy SaaSLocalTsStack --force
+
+
+npx cdk destroy SaaSLocalTsStack --force 
+
+
+https://eu-north-1.console.aws.amazon.com/cloudformation/home?region=eu-north-1#/stacks?f
+
+
+
+CloudFormation >> Stacks >> SaaSLocalTsStack
+Delete
+
+CloudFormation >> Stacks >> CDKToolkit
+Delete
+
+Things not automatically deleted
+
+These can persist outside the stack if created manually or by the CDK bootstrap process:
+
+ECR repositories
+
+Check ECR → Repositories
+
+If you see api, ai, web, or cdk-hnb659fds-container-assets-*, delete them (make sure to empty images first).
+
+SSM parameters
+
+Go to Systems Manager → Parameter Store
+
+Look for /saas-local-ts/apiImageTag, /aiImageTag, /webImageTag, or /cdk-bootstrap/* and delete if you no longer need them.
+
+S3 buckets (rare, only if you had asset buckets not managed by CloudFormation)
+
+CDK bootstrap creates an asset bucket (cdk-hnb659fds-assets-*). If that stack is still there, you might need to delete it separately.
+
+KMS keys (if bootstrap created one)
+
+Check KMS → Customer managed keys for unused cdk-* keys.
+
+
+Manual but thorough checklist (if you don’t want aws-nuke)
+
+To ensure zero billing, you must delete resources in all regions. Check:
+
+CloudFormation → delete all stacks (SaaSLocalTsStack, CDKToolkit, etc.)
+
+ECS → clusters + services
+
+ECR → repos (api, ai, web, cdk-hnb659fds-…)
+
+S3 → buckets (empty, then delete)
+
+EC2 → instances, load balancers, target groups, key pairs
+
+RDS / DynamoDB / ElastiCache / OpenSearch → delete clusters/tables/domains
+
+CloudWatch → log groups (optional, small cost)
+
+SSM Parameters / Secrets Manager → delete custom params/secrets
+
+IAM → inline roles/policies you no longer need
+
+KMS → customer-managed keys (cost $1/mo each)
 
 ------------------------------
 Trust policy >>
@@ -249,3 +313,98 @@ npx cdk destroy MyStackName
 Want help checking your stack's current resources or a safe cleanup order?
 
 You can run npx cdk list and send me the output. I’ll guide you through a complete cleanup.
+
+=======================================================================
+
+aws-nuke
+ChatGPT said:
+
+Alright 👍 let’s walk through aws-nuke — the community-standard tool to wipe all resources in an AWS account and guarantee $0 charges.
+
+🔹 What is aws-nuke?
+
+Open-source tool: rebuy-de/aws-nuke
+
+Iterates through all AWS services & regions
+
+Deletes everything (EC2, ECS, RDS, S3, ECR, IAM, CloudFormation, etc.)
+
+⚠️ Irreversible → use only on non-production or test accounts
+
+🔹 Install aws-nuke
+
+macOS (Homebrew):
+
+brew install aws-nuke
+
+
+Linux / Windows:
+
+Download the latest release from GitHub → aws-nuke releases
+
+Extract the binary and add it to your $PATH.
+
+🔹 Prepare config file
+
+Create aws-nuke-config.yml in your local machine:
+
+regions:
+  - "global"
+  - "us-east-1"
+  - "us-east-2"
+  - "us-west-1"
+  - "us-west-2"
+  - "ap-south-1"       # Mumbai (you likely used this)
+  - "ap-southeast-1"
+  - "ap-southeast-2"
+  - "ap-northeast-1"
+  - "ap-northeast-2"
+  - "eu-central-1"
+  - "eu-west-1"
+  - "eu-west-2"
+  - "eu-west-3"
+  - "sa-east-1"
+
+accounts:
+  "752095361522":   # << your AWS Account ID
+    filters: {}
+
+
+👉 filters: {} means delete everything.
+If you want to keep some resources (e.g., an IAM user or S3 bucket), you can add filters.
+
+🔹 Run aws-nuke
+
+Dry run first (see what it will delete):
+
+aws-nuke -c aws-nuke-config.yml --profile myprofile
+
+
+Actually delete (no dry run):
+
+aws-nuke -c aws-nuke-config.yml --profile myprofile --no-dry-run
+
+
+Replace myprofile with the AWS CLI profile that has admin privileges on your account.
+
+You’ll need to type --no-dry-run explicitly, or it won’t delete anything.
+
+🔹 After it runs
+
+CloudFormation, ECS, ECR, EC2, S3, RDS, DynamoDB, ElastiCache, IAM roles, etc. → all gone.
+
+Check in AWS Console → there should be nothing left in any region.
+
+Billing → within a few hours, usage will drop to zero.
+
+⚠️ Warning:
+
+This is a destructive operation — there’s no undo.
+
+Don’t run on any account you still need resources in.
+
+If you just want to clean one project, deleting the CloudFormation stacks + ECR + S3 manually is safer.
+
+👉 Do you want me to generate a ready-to-use aws-nuke-config.yml with your account ID and only the regions you actually used (so it runs faster)?
+
+====================================================================
