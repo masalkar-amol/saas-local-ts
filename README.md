@@ -31,17 +31,19 @@ Runs 100% locally via **Docker Compose** — **no cloud credentials required**.
 
 Mermaid (architecture):
 
+Mermaid (architecture):
+
 ```mermaid
 graph LR
   UI["React TS localhost:3000"] -->|Regular| API["Django/DRF localhost:9070"]
-  UI -->|AI| AI["FastAPI AI localhost:8001"]
-  API <--> PG[("PostgreSQL")]
+  UI -->|AI| AISVC["FastAPI AI localhost:8001"]
+  API <-->|CRUD| PG["PostgreSQL"]
   API -.tasks.-> WKR["Celery Worker"]
-  WKR -.broker.-> RDS[("Redis")]
-  API <--> MINIO[("MinIO")]
-  API <--> DDB[("DynamoDB-Local")]
-  API <--> OS[("OpenSearch")]
-  AI --> API
+  WKR -.broker.-> RDS["Redis"]
+  API <-->|S3 API| MINIO["MinIO"]
+  API <-->|SDK| DDB["DynamoDB-Local"]
+  API <-->|REST| OS["OpenSearch"]
+  AISVC --> API
 
 
 
