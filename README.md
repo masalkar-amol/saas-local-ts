@@ -34,6 +34,5 @@ Architecture :
 <img width="838" height="936" alt="c3" src="https://github.com/user-attachments/assets/20c9e4f1-5d86-48bc-b552-ce0065fd18cb" />
 
 
-
 docker compose exec api python manage.py migrate
 docker compose exec api python manage.py loaddata biomarkers_seed.json
