@@ -1,0 +1,15 @@
+flowchart LR
+  subgraph OpenSearch
+    IDXtxt[index: docs_bm25]
+    IDXvec[index: docs_vector]
+  end
+  subgraph FAISS
+    FIDX[HNSW or IVF-PQ index]
+  end
+  subgraph DuckDB
+    SNAP[(columnar snapshots)]
+  end
+  subgraph Postgres
+    TDOMAIN[(domain tables)]
+    TAUDIT[(task_audit)]
+  end

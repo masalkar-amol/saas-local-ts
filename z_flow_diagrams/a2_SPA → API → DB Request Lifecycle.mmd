@@ -1,0 +1,18 @@
+sequenceDiagram
+  autonumber
+  participant U as User (Browser)
+  participant X as nginx
+  participant A as Django/DRF (+Gunicorn)
+  participant P as Postgres
+  participant O as OpenSearch
+
+  U->>X: GET /app/
+  X-->>U: index.html + bundle.js
+  U->>X: GET /api/v1/entities?query=aspirin
+  X->>A: proxy /api/v1/entities
+  A->>P: SELECT ... WHERE name ILIKE '%aspirin%'
+  P-->>A: rows
+  A->>O: optional search "aspirin"
+  O-->>A: ranked hits
+  A-->>X: JSON (enriched list)
+  X-->>U: JSON response

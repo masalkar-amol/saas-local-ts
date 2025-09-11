@@ -1,0 +1,13 @@
+flowchart LR
+  API[DRF Endpoint] -->|apply_async| Q[Redis Queue]
+  BEAT[Celery Beat] -->|crontab| Q
+  Q --> W1[Celery Worker: ingestion]
+  Q --> W2[Celery Worker: embeddings]
+  Q --> W3[Celery Worker: exports/reports]
+
+  W1 --> MINIO[(MinIO)]
+  W1 --> DUCK[(DuckDB)]
+  W2 --> FAISS[(FAISS)]
+  W2 --> OS[(OpenSearch)]
+  W3 --> MINIO
+  W3 --> PG[(Postgres)]

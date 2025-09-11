@@ -1,0 +1,140 @@
+docker compose build --no-cache
+
+docker compose build
+docker compose up -d
+docker compose down
+docker compose up -d --build
+docker compose logs -f
+docker compose ps
+
+
+docker ps
+docker ps -a
+docker ps -aq
+docker ps -a --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}"
+
+docker stop a62418f86e90 e765a3867a51 61f13d331264 70b2a6b49da7 c8b7b7eaf6c6 12d512509d9b 7a7fcc516f2c 977d0d4c5db8 61c0e86788f7
+docker rm a62418f86e90 e765a3867a51 61f13d331264 70b2a6b49da7 c8b7b7eaf6c6 12d512509d9b 7a7fcc516f2c 977d0d4c5db8 61c0e86788f7
+
+docker compose config --services
+docker compose logs --tail=200 api
+docker compose port api 8000
+
+docker compose up -d
+
+
+docker compose exec -it postgres psql -U app -d comp -c "SELECT * from biomarkers_biomarker;"
+ id | code |               name               | assay_type | attributes |          created_at
+----+------+----------------------------------+------------+------------+-------------------------------
+  1 | EGFR | EPIDERMAL GROWTH FACTOR RECEPTOR | DNA        | {}         | 2025-09-06 07:05:14.832655+00
+(1 row)
+
+
+docker compose exec -it postgres psql -U app -d comp -c "delete from biomarkers_biomarker;"
+DELETE 1
+
+docker compose exec api python manage.py loaddata initial_data.json
+docker compose exec api python manage.py loaddata biomarkers_seed.json
+
+cp .env.example .env
+docker compose up -d --build
+# Web: http://localhost:3000
+# API: http://localhost:9180/api/biomarkers/
+# AI:  http://localhost:8001/ai/health
+# MinIO: http://localhost:9001 (minioadmin/minioadmin)
+# OpenSearch: http://localhost:9200
+
+docker compose exec api python manage.py shell -c \
+"from biomarkers.models import Biomarker; Biomarker.objects.get_or_create(code='EGFR', defaults={'name':'Epidermal Growth Factor Receptor','assay_type':'DNA'})"
+curl -s http://localhost:9070/api/biomarkers/ | python -m json.tool
+[
+    {
+        "id": 1,
+        "code": "EGFR",
+        "name": "Epidermal Growth Factor Receptor",
+        "assay_type": "DNA",
+        "attributes": {},
+        "created_at": "2025-09-06T07:05:14.832655Z"
+    }
+]
+
+
+netstat -ano | findstr :8000
+
+tasklist /FI "PID eq <that_PID>"
+
+taskkill /PID <that_PID> /F
+
+docker ps -a | findstr 8000
+docker stop <container_id>
+docker rm <container_id>
+
+
+HP@LAPTOP-QHTAA9V6 MINGW64 /e/ai/comp_senior_engineer_starter/comp-lifesci-saas-local-ts
+$ docker compose restart
+ Container comp-lifesci-saas-local-ts-redis-1  Restarting
+ Container comp-lifesci-saas-local-ts-dynamodb-1  Restarting
+ Container comp-lifesci-saas-local-ts-ai-1  Restarting
+ Container comp-lifesci-saas-local-ts-api-1  Restarting
+ Container comp-lifesci-saas-local-ts-opensearch-1  Restarting
+ Container comp-lifesci-saas-local-ts-minio-1  Restarting
+ Container comp-lifesci-saas-local-ts-worker-1  Restarting
+ Container comp-lifesci-saas-local-ts-web-1  Restarting
+ Container comp-lifesci-saas-local-ts-postgres-1  Restarting
+ Container comp-lifesci-saas-local-ts-postgres-1  Started
+ Container comp-lifesci-saas-local-ts-dynamodb-1  Started
+ Container comp-lifesci-saas-local-ts-redis-1  Started
+ Container comp-lifesci-saas-local-ts-web-1  Started
+ Container comp-lifesci-saas-local-ts-minio-1  Started
+ Container comp-lifesci-saas-local-ts-api-1  Started
+ Container comp-lifesci-saas-local-ts-worker-1  Started
+ Container comp-lifesci-saas-local-ts-ai-1  Started
+ Container comp-lifesci-saas-local-ts-opensearch-1  Started
+
+HP@LAPTOP-QHTAA9V6 MINGW64 /e/ai/comp_senior_engineer_starter/comp-lifesci-saas-local-ts
+$ docker compose up -d
+ Container comp-lifesci-saas-local-ts-dynamodb-1  Running
+ Container comp-lifesci-saas-local-ts-redis-1  Running
+ Container comp-lifesci-saas-local-ts-postgres-1  Running
+ Container comp-lifesci-saas-local-ts-opensearch-1  Running
+ Container comp-lifesci-saas-local-ts-minio-1  Running
+ Container comp-lifesci-saas-local-ts-ai-1  Running
+ Container comp-lifesci-saas-local-ts-api-1  Running
+ Container comp-lifesci-saas-local-ts-worker-1  Created
+ Container comp-lifesci-saas-local-ts-web-1  Running
+ Container comp-lifesci-saas-local-ts-worker-1  Starting
+ Container comp-lifesci-saas-local-ts-worker-1  Started
+
+HP@LAPTOP-QHTAA9V6 MINGW64 /e/ai/comp_senior_engineer_starter/comp-lifesci-saas-local-ts
+$ curl -s "http://localhost:8001/ai/search?q=EGFR" | python -m json.tool
+{
+    "query": "EGFR",
+    "contexts": [
+        "EGFR is a biomarker commonly used in oncology assays.",
+        "DNA assays differ from RNA assays in extraction and QC steps.",
+        "Turnaround time depends on assay type and lab automation."
+    ],
+    "answer": "EGFR is a biomarker commonly used in oncology assays."
+}
+
+
+git config --global core.autocrlf input
+
+
+
+Better: Use Named Docker Volumes to Persist Aliases
+
+The alias config is stored in /root/.mc/config.json, but you're using --rm, so it's deleted every time.
+
+To fix this, mount a volume to persist config between runs:
+
+docker volume create mc-config
+
+docker run --rm --network=host -v mc-config:/root/.mc \
+  minio/mc alias set local http://host.docker.internal:9000 minioadmin minioadmin
+
+docker run --rm --network=host -v mc-config:/root/.mc \
+  minio/mc mb -p local/biomarker-data
+
+
+This avoids needing to re-run alias set every time.

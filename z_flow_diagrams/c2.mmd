@@ -1,0 +1,34 @@
+%% Regular vs AI request flows
+sequenceDiagram
+  participant User
+  participant Web as Web (React TS)
+  participant API as API (DRF)
+  participant DB as PostgreSQL
+  participant AI as AI (FastAPI+FAISS)
+
+  rect rgb(240,250,255)
+  Note over Web: Mode = Regular
+  User->>Web: Search "EGFR"
+  Web->>API: GET /api/biomarkers/?search=EGFR
+  API->>DB: SELECT ... WHERE code/name LIKE '%EGFR%'
+  DB-->>API: rows
+  API-->>Web: 200 JSON (biomarkers)
+  Web-->>User: Render table
+  end
+
+  rect rgb(245,240,255)
+  Note over AI,API: AI startup / reindex
+  AI->>API: GET /api/biomarkers/
+  API->>DB: SELECT all
+  DB-->>API: rows
+  API-->>AI: JSON list
+  AI-->>AI: Encode (MiniLM) + FAISS index
+  end
+
+  rect rgb(255,248,240)
+  Note over Web: Mode = AI
+  User->>Web: Search "epidermal growth receptor mutation"
+  Web->>AI: GET /search?q=epidermal...
+  AI-->>Web: 200 JSON (rows + _ai_score)
+  Web-->>User: Render table (AI score column)
+  end

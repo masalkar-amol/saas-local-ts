@@ -1,0 +1,28 @@
+erDiagram
+  TENANT ||--o{ USER : has
+  TENANT ||--o{ DOCUMENT : owns
+  USER ||--o{ JOB : submits
+  DOCUMENT ||--o{ DOC_CHUNK : splits_into
+
+  DOCUMENT {
+    uuid id PK
+    uuid tenant_id
+    string uri
+    string mime_type
+    datetime created_at
+  }
+  DOC_CHUNK {
+    uuid id PK
+    uuid document_id FK
+    int chunk_no
+    text content
+    jsonb metadata
+  }
+  JOB {
+    uuid id PK
+    uuid user_id FK
+    string type
+    string status
+    jsonb params
+    datetime submitted_at
+  }

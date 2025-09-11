@@ -1,0 +1,19 @@
+sequenceDiagram
+  participant UI as React
+  participant AI as FastAPI (FAISS)
+  participant API as Django/DRF
+  participant DB as Postgres
+
+  rect rgba(200,200,255,0.1)
+  Note over AI,API: Startup / Reindex
+  AI->>API: GET /api/biomarkers/
+  API->>DB: SELECT all
+  DB-->>API: rows
+  API-->>AI: JSON list
+  AI-->>AI: encode + index in FAISS
+  end
+
+  UI->>AI: GET /search?q=EGFR
+  AI-->>AI: encode query + FAISS cosine search
+  AI-->>UI: 200 JSON (rows + _ai_score)
+  UI-->>UI: render table (with score)

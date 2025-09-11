@@ -1,0 +1,29 @@
+%% High-level architecture & wiring
+graph LR
+  subgraph Localhost
+    UI[React TS webpack-dev-server\nhttp://localhost:3000]
+  end
+
+  subgraph Docker Network
+    API[Django + DRF + Gunicorn\napi:8000 → host:9070]
+    AI[FastAPI + Sentence-Transformers + FAISS\nai:8001 → host:8001]
+    PG[PostgreSQL\n5432 → host:5432]
+    RDS[Redis\n6379 → host:6379]
+    MINIO[MinIO S3-compatible\n9000/9001 → host:9000/9001]
+    DDB[(DynamoDB-Local\n8000 → host:9040)]
+    OS[(OpenSearch\n9200/9600 → host:9200/9600)]
+    WKR[Celery Worker]
+  end
+
+  UI -- Regular search --> API
+  UI -- AI search --> AI
+
+  API <--> PG
+  API <--> MINIO
+  API <--> DDB
+  API <--> OS
+  API <-.tasks .-> WKR
+  WKR <-.broker .-> RDS
+
+  AI -- indexing fetch --> API
+  AI -. optional hybrid .- OS

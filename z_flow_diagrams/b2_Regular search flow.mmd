@@ -1,0 +1,10 @@
+sequenceDiagram
+  participant UI as React
+  participant API as Django/DRF
+  participant DB as Postgres
+
+  UI->>API: GET /api/biomarkers/?search=EGFR
+  API->>DB: SELECT ... WHERE code LIKE '%EGFR%' OR name LIKE ... 
+  DB-->>API: rows
+  API-->>UI: 200 JSON (rows)
+  UI-->>UI: render table

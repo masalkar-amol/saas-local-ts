@@ -1,0 +1,7 @@
+flowchart LR
+  NGINX -.->|logs| PROM[Promtail]
+  DRF -.->|logs| PROM
+  CELERY -.->|logs| PROM
+  RAG -.->|logs| PROM
+  PROM --> LOKI[(Loki)]
+  LOKI --> GRAF[Grafana Dashboards]

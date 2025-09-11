@@ -1,0 +1,12 @@
+flowchart TD
+  SRC[(CSV/Parquet/Docs)] --> UP[SPA Upload]
+  UP -->|/api/files| DRF
+  DRF --> MINIO[(MinIO - raw object)]
+  DRF -->|Celery delay| Q[Redis Queue]
+  Q --> W[Celery Workers]
+  W --> MINIO
+  W -->|PyArrow parse| DUCK[(DuckDB)]
+  W --> META[Normalizer/Metadata]
+  META --> OS[OpenSearch]
+  META --> DDB[(DynamoDB Local)]
+  META --> DUCK

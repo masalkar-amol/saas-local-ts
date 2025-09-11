@@ -1,0 +1,19 @@
+sequenceDiagram
+  autonumber
+  participant UI as UI
+  participant API as DRF API
+  participant R as RAG FastAPI
+  participant E as sentence-transformers
+  participant F as FAISS Index
+  participant O as OpenSearch (optional)
+
+  UI->>API: POST /api/rag/query { q, k }
+  API->>R: /search?q=...&k=...
+  R->>E: embed(query)
+  E-->>R: query embedding
+  R->>F: topK(embedding)
+  F-->>R: candidate contexts
+  R->>O: optional BM25 cross-check
+  O-->>R: BM25 hits
+  R-->>API: contexts (+scores)
+  API-->>UI: final answer + sources

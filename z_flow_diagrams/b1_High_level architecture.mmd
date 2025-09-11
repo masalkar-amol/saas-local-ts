@@ -1,0 +1,14 @@
+graph LR
+  A[React TS localhost:3000]
+  subgraph Docker Network
+    B[Django+DRF api:8000]
+    C[FastAPI AI ai:8001]
+    D[(Postgres)]
+    E[(Redis)]
+  end
+
+  A -- Regular GET /api/biomarkers?search --> B
+  A -- AI GET/POST /search?q --> C
+  C -- initial load / reindex --> B
+  B <--> D
+  Celery[Celery Worker] -- broker --> E
