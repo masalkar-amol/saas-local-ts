@@ -26,47 +26,69 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # 2) Capture account id & build tag
+      # 2) Resolve account id & image tag
       - name: Resolve AWS account & image tag
         id: meta
+        shell: bash
         run: |
+          set -euo pipefail
           echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
           echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      # 3) Compute ECR registry url (must match region above)
+      # 3) Compute ECR registry URL
       - name: Set ECR registry env
-        run: echo "ECR_REGISTRY=${{ steps.meta.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> $GITHUB_ENV
-
-      # 4) Ensure ECR repos exist (prevents 'name unknown' errors)
-      - name: Ensure ECR repositories
+        shell: bash
         run: |
+          set -euo pipefail
+          echo "ECR_REGISTRY=${{ steps.meta.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com" >> "$GITHUB_ENV"
+
+      # 4) Ensure ECR repositories exist (fix: singular --repository-name for create)
+      - name: Ensure ECR repositories
+        shell: bash
+        run: |
+          set -euo pipefail
           for repo in api ai web; do
-            aws ecr describe-repositories --repository-names "$repo" >/dev/null 2>&1 || \
-            aws ecr create-repository --repository-names "$repo" >/dev/null
+            if ! aws ecr describe-repositories --repository-names "$repo" >/dev/null 2>&1; then
+              aws ecr create-repository \
+                --repository-name "$repo" \
+                --image-scanning-configuration scanOnPush=true \
+                --tags Key=Project,Value=saas-local-ts >/dev/null
+              echo "Created ECR repo: $repo"
+            else
+              echo "ECR repo exists: $repo"
+            fi
           done
 
       # 5) Login to ECR
       - uses: aws-actions/amazon-ecr-login@v2
 
-      # 6) Build & push images (NOTE: tag with full ECR repo url)
+      # 6) Build & push images (tag = short SHA)
       - name: Build & Push API
+        shell: bash
         run: |
-          docker build -t $ECR_REGISTRY/api:${{ steps.meta.outputs.tag }} -f api/Dockerfile api
-          docker push $ECR_REGISTRY/api:${{ steps.meta.outputs.tag }}
+          set -euo pipefail
+          docker build -t "$ECR_REGISTRY/api:${{ steps.meta.outputs.tag }}" -f api/Dockerfile api
+          docker push "$ECR_REGISTRY/api:${{ steps.meta.outputs.tag }}"
 
       - name: Build & Push AI
+        shell: bash
         run: |
-          docker build -t $ECR_REGISTRY/ai:${{ steps.meta.outputs.tag }} -f ai/Dockerfile ai
-          docker push $ECR_REGISTRY/ai:${{ steps.meta.outputs.tag }}
+          set -euo pipefail
+          docker build -t "$ECR_REGISTRY/ai:${{ steps.meta.outputs.tag }}" -f ai/Dockerfile ai
+          docker push "$ECR_REGISTRY/ai:${{ steps.meta.outputs.tag }}"
 
       - name: Build & Push WEB
+        shell: bash
         run: |
-          docker build -t $ECR_REGISTRY/web:${{ steps.meta.outputs.tag }} -f web/Dockerfile web
-          docker push $ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}
+          set -euo pipefail
+          docker build -t "$ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}" -f web/Dockerfile web
+          docker push "$ECR_REGISTRY/web:${{ steps.meta.outputs.tag }}"
 
       # 7) Publish image tags to SSM for CDK to consume
       - name: Write image tags to SSM
+        shell: bash
         run: |
+          set -euo pipefail
           aws ssm put-parameter --name "/saas-local-ts/apiImageTag" --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
           aws ssm put-parameter --name "/saas-local-ts/aiImageTag"  --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
           aws ssm put-parameter --name "/saas-local-ts/webImageTag" --type String --overwrite --value "${{ steps.meta.outputs.tag }}"
@@ -77,17 +99,23 @@ jobs:
           node-version: 20
 
       - name: Install CDK app deps
+        shell: bash
         run: |
+          set -euo pipefail
           cd infra/cdk
           npm ci
 
       - name: CDK Bootstrap (safe to re-run)
+        shell: bash
         run: |
+          set -euo pipefail
           cd infra/cdk
           ACCOUNT_ID=${{ steps.meta.outputs.account_id }}
           npx cdk bootstrap aws://$ACCOUNT_ID/${{ env.AWS_REGION }}
 
       - name: CDK Deploy
+        shell: bash
         run: |
+          set -euo pipefail
           cd infra/cdk
-          npx cdk deploy ${{ env.CDK_STACK_NAME }} --require-approval never
+          npx cdk deploy "${{ env.CDK_STACK_NAME }}" --require-approval never
