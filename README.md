@@ -35,5 +35,6 @@ Runs 100% locally via **Docker Compose** — **no cloud credentials required**.
 ## Demo Video
 [![Watch the demo](https://github.com/masalkar-amol/saas-local-ts/blob/master/z_flow_diagrams/screenshots/v1_recording.mp4)]
 
+## Table creation & seed data insertion 
 docker compose exec api python manage.py migrate
 docker compose exec api python manage.py loaddata biomarkers_seed.json
