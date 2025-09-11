@@ -54,6 +54,9 @@ In the role page, go to the Permissions tab.
 Click Add permissions → Create inline policy.
 
 Choose the JSON tab and paste in this minimum policy:
+
+new inline policy created >> GitHubActionsCDKDeployPolicy
+
 >>
 
 {
@@ -64,10 +67,14 @@ Choose the JSON tab and paste in this minimum policy:
       "Action": [
         "ecr:GetAuthorizationToken",
         "ecr:CreateRepository",
+        "ecr:DeleteRepository",
         "ecr:DescribeRepositories",
         "ecr:DescribeImages",
+        "ecr:PutLifecyclePolicy",
+        "ecr:GetLifecyclePolicy",
+        "ecr:GetLifecyclePolicyPreview",
+        "ecr:ListImages",
         "ecr:SetRepositoryPolicy",
-        "ecr:ListTagsForResource",
         "ecr:TagResource",
         "ecr:UntagResource",
         "ecr:BatchCheckLayerAvailability",
@@ -78,7 +85,7 @@ Choose the JSON tab and paste in this minimum policy:
         "ecr:BatchGetImage",
         "ecr:BatchDeleteImage"
       ],
-      "Resource": "*"
+      "Resource": "arn:aws:ecr:*:752095361522:repository/*"
     },
     {
       "Effect": "Allow",
@@ -88,7 +95,7 @@ Choose the JSON tab and paste in this minimum policy:
         "ssm:GetParameters",
         "ssm:AddTagsToResource"
       ],
-      "Resource": "arn:aws:ssm:*:752095361522:parameter/saas-local-ts/*"
+      "Resource": "arn:aws:ssm:*:752095361522:parameter/*"
     },
     {
       "Effect": "Allow",
@@ -98,12 +105,15 @@ Choose the JSON tab and paste in this minimum policy:
         "elasticloadbalancing:*",
         "logs:*",
         "ec2:*",
+        "s3:*",
+        "kms:*",
         "iam:PassRole"
       ],
       "Resource": "*"
     }
   ]
 }
+
 
 -----------------------------------------------------------------
 error conf
