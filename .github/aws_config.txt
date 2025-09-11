@@ -16,6 +16,22 @@ Value: arn:aws:iam::752095361522:role/IAM_Role_ma
 ECR_REGISTRY
 Name: ECR_REGISTRY
 Value: 752095361522.dkr.ecr.eu-north-1.amazonaws.com
+
+CDK_STACK_NAME
+Name: CDK_STACK_NAME
+Value: SaaSLocalTsStack
+
+
+
+Now your GitHub Actions workflow can use:
+run: npx cdk deploy ${{ secrets.CDK_STACK_NAME }} --require-approval never
+
+
+Or for destroy:
+
+run: npx cdk destroy ${{ secrets.CDK_STACK_NAME }} --force
+
+
 ------------------------------
 Trust policy >>
 
