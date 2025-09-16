@@ -1,6 +1,14 @@
 
 aws account id >>
 752095361522
+
+powershell >> 
+wsl --update
+Checking for updates.
+Updating Windows Subsystem for Linux to version: 2.5.10.
+PS C:\WINDOWS\system32> wsl --shutdown
+PS C:\WINDOWS\system32> wsl --version
+
 ------------------------------
 Go to your GitHub repository → Settings → Secrets and Variables → Actions
 Click “New repository secret”
@@ -408,3 +416,32 @@ If you just want to clean one project, deleting the CloudFormation stacks + ECR 
 👉 Do you want me to generate a ready-to-use aws-nuke-config.yml with your account ID and only the regions you actually used (so it runs faster)?
 
 ====================================================================
+postgres sample db >>
+"C:\Program Files\PostgreSQL\16\bin\pg_restore.exe" --host localhost --port 5432 --username postgres --dbname dvdrental --verbose "C:\Users\HP\Downloads\dvdrental\dvdrental.tar"
+
+pip install psycopg2-binary
+pip install psycopg2
+python -m pip show psycopg2-binary
+pip install "psycopg[binary]"
+
+export DATABASE_URL="postgresql+psycopg://postgres:root@localhost:5432/dvdrental"
+python generate_openapi_from_db.py \
+  --db "$DATABASE_URL" \
+  --meta openapi/base/metadata.yaml \
+  --outdir openapi
+
+
+
+
+
+Option A (recommended for greenfield): Schema-first with Pydantic v2 + OpenAPI
+
+Source of truth: Pydantic models (DTOs) → model_json_schema() for contracts.
+
+API: DRF or FastAPI emits OpenAPI from those models.
+
+DB: Django models stay persistence-first; keep only operational metadata here.
+
+Cross-cutting metadata (PII, labels, retention, enum semantics): put into Pydantic Field(..., json_schema_extra=...) so it propagates to docs, clients, and UI scaffolding.
+
+Search: A small mapper translates DTOs → OpenSearch index docs (and tags which fields are searchable/embeddable).

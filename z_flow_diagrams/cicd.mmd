@@ -1,0 +1,39 @@
+flowchart TD
+  A[Push to main / manual dispatch] --> B[GitHub Actions job start]
+
+  subgraph CI
+    B --> C[OIDC: configure-aws-credentials@v4<br/>assume role: IAM_Role_ma<br/>set AWS_REGION]
+    C --> D[Resolve account ID + tag = short SHA]
+    D --> E[Set ECR_REGISTRY env]
+    E --> F{Changed paths?}
+    F -->|api changed| G[Build API image<br/>docker build → tag: ECR/api:SHA<br/>docker push]
+    F -->|ai changed| H[Build AI image<br/>docker build → tag: ECR/ai:SHA<br/>docker push]
+    F -->|web changed| I[Build WEB image<br/>docker buildx w/ cache → tag: ECR/web:SHA<br/>docker push]
+    F -->|none| J[Skip builds]
+    G --> K[Write /saas-local-ts/apiImageTag=SHA in SSM]
+    H --> L[Write /saas-local-ts/aiImageTag=SHA in SSM]
+    I --> M[Write /saas-local-ts/webImageTag=SHA in SSM]
+    J --> N[Ensure SSM tags still set - optional]
+  end
+
+  subgraph CDK
+    K --> O[Setup Node 20]
+    L --> O
+    M --> O
+    N --> O
+    O --> P{CDK path exists?}
+    P -->|No| Q[Skip CDK steps<br/> warn]
+    P -->|Yes| R[Install CDK deps<br/>npm ci if lockfile else npm i<br/>ensure aws-cdk-lib/constructs/ts-node/@types/node]
+    R --> S[cdk bootstrap<br/> first time only]
+    S --> T[Resolve stack name<br/>secret - CDK_STACK_NAME or `cdk ls`]
+    T --> U[cdk deploy STACK --require-approval never]
+  end
+
+  subgraph AWS
+    U --> V[CloudFormation updates stack]
+    V --> W[ECS services updated<br/>new task defs → pull ECR images - by SSM tag]
+    W --> X[ALB target groups drain/shift<br/>health checks pass]
+    X --> Y[Outputs: WebURL, ApiURL]
+  end
+
+  Y --> Z[Done ✅]

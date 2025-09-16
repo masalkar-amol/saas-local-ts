@@ -1,0 +1,161 @@
+flowchart TD
+  %% ================== TRIGGERS ==================
+  T["Triggers"]
+  T -->|push to main| CI
+  T -->|PR to main| CI
+  T -->|tag v*.*.*| CI
+  T -->|nightly| CI
+  T -->|workflow dispatch| CI
+
+  %% ================== MONOREPO / PATH FILTERS ==================
+  CI["Start CI"] --> PF{"Changed paths?"}
+  PF -->|app only| BOOT
+  PF -->|infra only| BOOT
+  PF -->|both| BOOT
+
+  %% ================== BOOTSTRAP ==================
+  subgraph BOOT["Bootstrap and Tooling"]
+    direction TB
+    B1["actions checkout v4 fetch depth 1"]
+    B2["Setup Node PNPM and Python"]
+    B3["Restore caches node pip docker"]
+    B4["Compute version git sha or semver"]
+    B5["Generate SBOM and provenance"]
+    B1 --> B2 --> B3 --> B4 --> B5
+  end
+
+  BOOT --> GATES
+
+  %% ================== QUALITY GATES ==================
+  subgraph GATES["Quality Gates"]
+    direction LR
+    LINT["Lint ESLint Black Flake8"]
+    SAST["CodeQL and Semgrep"]
+    UNIT["Unit tests jest or pytest with coverage"]
+    DAST["DAST light optional"]
+    LINT --> SAST --> UNIT --> DAST --> GOK{"Gates passed?"}
+  end
+
+  GOK -->|no| FAIL1["Fail and notify"]
+  GOK -->|yes| BUILD
+
+  %% ================== DOCKER BUILD AND SCAN ==================
+  subgraph BUILD["Build Artifacts and Docker Images"]
+    direction TB
+    A1["Build app artifacts React bundle and wheels"]
+    D1["Docker buildx build platform linux amd64"]
+    D2["Tag app gitsha app semver latest"]
+    D3["Trivy scan image"]
+    D4{"Vulnerabilities within policy?"}
+    A1 --> D1 --> D2 --> D3 --> D4
+  end
+
+  D4 -->|no| FAIL2["Blocked by image policy"]
+  D4 -->|yes| REG
+
+  %% ================== ECR LOGIN AND PUSH OIDC ==================
+  subgraph REG["Login and Push to Amazon ECR"]
+    direction TB
+    R0["Configure AWS via OIDC AssumeRole gha ecr push"]
+    R1["aws ecr get login password then docker login"]
+    R2["docker push app gitsha and app semver"]
+    R3["Attach attestations or sign with cosign"]
+    R0 --> R1 --> R2 --> R3
+  end
+
+  REG --> CDK
+
+  %% ================== CDK SYNTH DIFF PLAN ==================
+  subgraph CDK["CDK Plan"]
+    direction TB
+    C0["Configure AWS via OIDC AssumeRole cdk deploy ENV"]
+    C1["cdk bootstrap per account and region once"]
+    C2["cdk synth env dev"]
+    C3["cdk diff env dev"]
+    C4{"Requires approval security policy?"}
+    C0 --> C1 --> C2 --> C3 --> C4
+  end
+
+  C4 -->|no dev| DEV
+  C4 -->|yes stage or prod| APPR["Manual approval gate"] --> DEV
+
+  %% ================== DEPLOY DEV ==================
+  subgraph DEV["Deploy to DEV"]
+    direction TB
+    DPL1["cdk deploy require approval never"]
+    DPL2["Infra provision or update ECS EKS Lambda RDS Dynamo S3 ALB"]
+    DPL3["Update service to new image tag"]
+    DPL4["Database migrations safe and idempotent"]
+    DPL5["Feature flags set for dark launch"]
+    DPL6["Smoke checks and health endpoints"]
+    DPL7{"Smoke passed?"}
+    DPL1 --> DPL2 --> DPL3 --> DPL4 --> DPL5 --> DPL6 --> DPL7
+  end
+
+  DPL7 -->|no| RB1["Auto rollback to previous task definition or Lambda version"]
+  DPL7 -->|yes| INT
+
+  %% ================== INTEGRATION AND CONTRACT TESTS ==================
+  subgraph INT["Post Deploy Tests on DEV"]
+    direction TB
+    I1["Integration tests"]
+    I2["Contract PACT tests"]
+    I3["Short performance sanity k6"]
+    I4{"All green?"}
+    I1 --> I2 --> I3 --> I4
+  end
+
+  I4 -->|no| FAIL3["Stop promotion and notify"]
+  I4 -->|yes| STAGE
+
+  %% ================== DEPLOY STAGE ==================
+  subgraph STAGE["Deploy to STAGE"]
+    direction TB
+    S0["AssumeRole cdk deploy stage"]
+    S1["cdk synth diff deploy"]
+    S2["Database migrations non destructive"]
+    S3["Canary 10 percent to 50 percent to 100 percent traffic via ALB weighted or App Mesh"]
+    S4["End to end tests Playwright"]
+    S5{"Pass?"}
+    S0 --> S1 --> S2 --> S3 --> S4 --> S5
+  end
+
+  S5 -->|no| RB2["Rollback stage and notify"]
+  S5 -->|yes| PROD_APPROVE["Change Control manual approval"]
+
+  %% ================== DEPLOY PROD ==================
+  subgraph PROD["Deploy to PROD"]
+    direction TB
+    P0["AssumeRole cdk deploy prod least privilege"]
+    P1["cdk deploy in waves Network then Data then App"]
+    P2["Database migrations guarded by flags"]
+    P3["Blue Green or weighted shift"]
+    P4["Synthetic checks and SLO monitors"]
+    P5{"Healthy error rate latency SLO?"}
+    P0 --> P1 --> P2 --> P3 --> P4 --> P5
+  end
+
+  PROD_APPROVE --> P0
+  P5 -->|no| RB3["One click rollback to previous revision"]
+  P5 -->|yes| OPS
+
+  %% ================== OPS AND GOVERNANCE ==================
+  subgraph OPS["Post Deploy Ops and Governance"]
+    direction TB
+    O1["Tag release across Git ECR CloudWatch"]
+    O2["Emit deployment events EventBridge"]
+    O3["Drift detection cdk diff nightly"]
+    O4["Cost guardrails Budgets Anomaly rightsizing"]
+    O5["Security posture Inspector ECR scan IAM Access Analyzer"]
+    O6["Dashboards and logs CloudWatch Grafana OpenSearch"]
+    O7["Notify Slack or Teams and release notes"]
+    O1 --> O2 --> O3 --> O4 --> O5 --> O6 --> O7
+  end
+
+  %% ================== FAILURE SINK ==================
+  FAIL1 -->|triage| OPS
+  FAIL2 -->|triage| OPS
+  FAIL3 -->|triage| OPS
+  RB1 --> OPS
+  RB2 --> OPS
+  RB3 --> OPS
